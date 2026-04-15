@@ -287,12 +287,23 @@ public partial class MainForm : Form
             return;
         }
 
+        // Validate invite code
+        string newCode = txtInviteCode.Text.Trim();
+        if (!System.Text.RegularExpressions.Regex.IsMatch(newCode, @"^[a-zA-Z0-9]{6,}$"))
+        {
+            MessageBox.Show(
+                "Invite code must be at least 6 characters and contain only letters (a-z, A-Z) and numbers (0-9).",
+                "Invalid Invite Code", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        existing.InviteCode          = newCode;
         existing.ServerName          = txtServerName.Text.Trim();
         existing.IsPasswordProtected = chkPasswordProtected.Checked;
         existing.Password            = txtPassword.Text;
         existing.MaxPlayerCount      = (int)numMaxPlayers.Value;
         existing.P2pProxyAddress     = txtP2pProxy.Text.Trim();
-        // InviteCode, PersistentServerId, WorldIslandId preserved from existing
+        // PersistentServerId, WorldIslandId preserved from existing
 
         bool ok = _configManager.WriteServerDescription(existing);
         if (ok)

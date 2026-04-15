@@ -108,6 +108,26 @@ Common issues:
 - **IPv6 causing failures** — if diagnostics reports IPv6 has higher priority, run in an admin Command Prompt and restart: `reg add "HKLM\SYSTEM\CurrentControlSet\Services\Tcpip6\Parameters" /v DisabledComponents /t REG_DWORD /d 32 /f`
 - **DNS not resolving** — try switching to Google DNS (8.8.8.8 / 8.8.4.4) or Cloudflare (1.1.1.1).
 
+### Proxmox
+
+If hosting inside a Proxmox VM or LXC container, set the CPU type to **host** in the VM/container settings. The default `kvm64` CPU type can cause the server to fail to start, crash, or exhibit networking instability. Using `host` exposes the full physical CPU instruction set to the guest and resolves the majority of these issues.
+
+> Safe for single-node setups. In a clustered Proxmox environment with live migration, ensure all nodes have compatible CPUs before using `host`.
+
+### Linux (Experimental)
+
+The dedicated server is Windows-only officially, but has been confirmed working on Linux via Wine (tested on Linux Mint 22.3):
+
+1. Install Wine and Winetricks
+2. Install the required runtime: `winetricks vcrun2022`
+3. Install the server via SteamCMD with forced Windows platform:
+   ```
+   steamcmd +@sSteamCmdForcePlatformType windows +force_install_dir /home/steam/windrose +login anonymous +app_update 4129620 validate +quit
+   ```
+4. Launch: `WINEPREFIX=/home/steam/windrose/pfx wine /home/steam/windrose/WindroseServer.exe`
+
+Not officially supported — stability and performance are not guaranteed.
+
 ## Server File Locations
 
 All files are stored relative to the exe in the `WindroseServer\` folder:
