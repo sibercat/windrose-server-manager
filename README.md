@@ -88,6 +88,26 @@ Writes a `Game.ini` override file to configure P2P networking behavior. All valu
 
 Set **P2P Proxy Address** to `0.0.0.0` in Server Config (already the default). The server uses STUN for NAT traversal — all clients connect to the server, not to each other. Only the server's IP is exposed to players.
 
+**Required firewall / security group rule:**
+
+| Port | Protocol | Destination | Purpose |
+|------|----------|-------------|---------|
+| 3478 | UDP + TCP | `*.windrose.support` | STUN/TURN relay — required for player connectivity |
+
+The P2P port range in Advanced Network Settings is a secondary local bind range override and is rarely needed.
+
+## Troubleshooting
+
+Use the **Run Diagnostics** button on the Dashboard to automatically check:
+- DNS resolution for Windrose servers (system DNS + Google 8.8.8.8)
+- STUN/TURN port 3478 reachability
+- IPv4 vs IPv6 priority (game requires IPv4)
+
+Common issues:
+- **Players can't connect** — ISP may be blocking port 3478. Ask them to whitelist `*.windrose.support` port 3478 UDP+TCP.
+- **IPv6 causing failures** — if diagnostics reports IPv6 has higher priority, run in an admin Command Prompt and restart: `reg add "HKLM\SYSTEM\CurrentControlSet\Services\Tcpip6\Parameters" /v DisabledComponents /t REG_DWORD /d 32 /f`
+- **DNS not resolving** — try switching to Google DNS (8.8.8.8 / 8.8.4.4) or Cloudflare (1.1.1.1).
+
 ## Server File Locations
 
 All files are stored relative to the exe in the `WindroseServer\` folder:

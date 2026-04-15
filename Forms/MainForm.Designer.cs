@@ -22,6 +22,7 @@ partial class MainForm
     protected ProgressBar progressBar;
     protected Label lblProgress;
     protected Button btnClearConsole;
+    protected Button btnRunDiagnostics;
     protected CheckBox chkAutoScroll;
     protected TextBox rtbConsole;
 
@@ -231,9 +232,10 @@ partial class MainForm
             btnUpdate, btnRestart, progressBar, lblProgress]);
 
         var pnlBar = new Panel { Dock = DockStyle.Top, Height = 32 };
-        btnClearConsole = new Button { Text = "Clear", Size = new Size(70, 24), Location = new Point(8, 4) };
-        chkAutoScroll   = new CheckBox { Text = "Auto-scroll", Checked = true, AutoSize = true, Location = new Point(88, 8) };
-        pnlBar.Controls.AddRange([btnClearConsole, chkAutoScroll]);
+        btnClearConsole   = new Button   { Text = "Clear",            Size = new Size(70,  24), Location = new Point(8,   4) };
+        chkAutoScroll     = new CheckBox { Text = "Auto-scroll", Checked = true, AutoSize = true, Location = new Point(88, 8) };
+        btnRunDiagnostics = new Button   { Text = "Run Diagnostics",  Size = new Size(130, 24), Location = new Point(188, 4) };
+        pnlBar.Controls.AddRange([btnClearConsole, chkAutoScroll, btnRunDiagnostics]);
 
         rtbConsole = new TextBox
         {
@@ -722,7 +724,13 @@ partial class MainForm
         toolTip.SetToolTip(btnUpdate,       "Download and apply updates via SteamCMD. Also validates and repairs existing files.");
         toolTip.SetToolTip(btnRestart,      "Stop the server and start it again immediately.");
         toolTip.SetToolTip(chkAutoScroll,   "Keep the console scrolled to the latest output.");
-        toolTip.SetToolTip(btnClearConsole, "Clear all text from the console window.");
+        toolTip.SetToolTip(btnClearConsole,   "Clear all text from the console window.");
+        toolTip.SetToolTip(btnRunDiagnostics,
+            "Run connectivity checks and show results in the console:\n" +
+            "• DNS resolution for Windrose servers (system DNS + Google 8.8.8.8)\n" +
+            "• STUN/TURN port 3478 reachability on windrose.support\n" +
+            "• IPv4 vs IPv6 priority (game requires IPv4)\n\n" +
+            "Use this if players can't find or connect to the server.");
 
         // ── Settings — Server Config ─────────────────────────────────
         toolTip.SetToolTip(txtInviteCode,
@@ -841,17 +849,18 @@ partial class MainForm
 
         // ── Settings — Advanced Network ───────────────────────────────
         toolTip.SetToolTip(numPortMin,
-            "Minimum local UDP port the server binds to for P2P connections.\n" +
-            "0 = use the game's baked-in default (range chosen by the engine).\n\n" +
-            "If you set a range, open those ports (UDP) in your firewall\n" +
-            "or VPS security group so players can reach the server.\n\n" +
-            "The server uses STUN for NAT traversal — clients connect to\n" +
-            "the server, not to each other. Only the server IP is exposed.");
+            "Local UDP port range the server binds to (optional override).\n" +
+            "0 = use the game's baked-in default.\n\n" +
+            "NOTE: The critical port for player connectivity is 3478 (UDP+TCP)\n" +
+            "on *.windrose.support — that's the STUN/TURN relay used for NAT\n" +
+            "traversal. This range setting is separate and rarely needs changing.\n\n" +
+            "If you do set a range, open those UDP ports in your firewall\n" +
+            "or VPS security group.");
         toolTip.SetToolTip(numPortMax,
-            "Maximum local UDP port the server binds to for P2P connections.\n" +
-            "0 = use the game's baked-in default (range chosen by the engine).\n\n" +
-            "If you set a range, open those ports (UDP) in your firewall\n" +
-            "or VPS security group so players can reach the server.");
+            "Maximum of the local UDP port bind range (optional override).\n" +
+            "0 = use the game's baked-in default.\n\n" +
+            "The port players actually need reachable is 3478 (UDP+TCP)\n" +
+            "on *.windrose.support for STUN/TURN — not this range.");
         toolTip.SetToolTip(chkSecureConnection,
             "Encrypt the connection between players and the server.\n\n" +
             "OFF by default (game default = unencrypted UDP).\n" +

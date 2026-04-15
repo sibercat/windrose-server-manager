@@ -78,7 +78,8 @@ public partial class MainForm : Form
         btnServerAction.Click += BtnServerAction_Click;
         btnUpdate.Click       += BtnUpdate_Click;
         btnRestart.Click      += BtnRestart_Click;
-        btnClearConsole.Click += (_, _) => rtbConsole.Clear();
+        btnClearConsole.Click   += (_, _) => rtbConsole.Clear();
+        btnRunDiagnostics.Click += async (_, _) => await RunDiagnosticsAsync();
 
         // Settings — launcher prefs
         btnSaveSettings.Click   += BtnSaveSettings_Click;
