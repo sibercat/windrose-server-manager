@@ -28,8 +28,8 @@ A Windows desktop application for managing a Windrose dedicated server. Built wi
 
 1. Download the latest release from the [Releases](../../releases) page
 2. Extract and run `WindroseServerManager.exe`
-3. On first launch, point the app at your SteamCMD installation and choose a server install directory
-4. Click **Install / Update Server** to download the dedicated server files
+3. On first launch, choose a directory where the server files will be installed
+4. Click **Install / Update Server** — SteamCMD and the server files are downloaded automatically
 
 ## Server Files
 
