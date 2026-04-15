@@ -52,6 +52,7 @@ public partial class MainForm : Form
         ThemeManager.Apply(this);
 
         this.Shown += (_, _) => ThemeManager.ReapplyConsoleThemeOverrides(this);
+        this.Shown += (_, _) => _ = CheckForUpdateAsync();
 
         _serverManager.InitializeState();
         UpdateServerState(_serverManager.State);

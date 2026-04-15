@@ -10,7 +10,7 @@ partial class MainForm
     protected ToolStripMenuItem menuFile;
     protected ToolStripMenuItem menuOpenServerFolder, menuOpenBackupFolder, menuOpenConfigFile, menuExit;
     protected StatusStrip statusStrip;
-    protected ToolStripStatusLabel tsStatus, tsUptime, tsNextRestart, tsNextBackup;
+    protected ToolStripStatusLabel tsStatus, tsUptime, tsNextRestart, tsNextBackup, tsUpdateAvailable;
 
     // ── Main Tab ─────────────────────────────────────────────────────
     protected DarkTabControl tabMain;
@@ -163,7 +163,18 @@ partial class MainForm
         tsUptime      = new ToolStripStatusLabel("  Uptime: --:--:--")      { Spring = false };
         tsNextRestart = new ToolStripStatusLabel("")                         { Spring = false };
         tsNextBackup  = new ToolStripStatusLabel("")                         { Spring = true  };
-        statusStrip.Items.AddRange([tsStatus, tsUptime, tsNextRestart, tsNextBackup]);
+        tsUpdateAvailable = new ToolStripStatusLabel
+        {
+            Visible         = false,
+            IsLink          = true,
+            LinkBehavior    = LinkBehavior.HoverUnderline,
+            ForeColor       = Color.FromArgb(78, 201, 176),
+            ActiveLinkColor = Color.White,
+            Font            = new Font(SystemFonts.DefaultFont, FontStyle.Bold),
+            ToolTipText     = "Click to open the releases page",
+            Spring          = false
+        };
+        statusStrip.Items.AddRange([tsStatus, tsUptime, tsNextRestart, tsNextBackup, tsUpdateAvailable]);
     }
 
     // ── Dashboard Tab ─────────────────────────────────────────────────
