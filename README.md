@@ -1,4 +1,5 @@
 # Windrose Server Manager
+![Dashboard](https://raw.githubusercontent.com/sibercat/windrose-server-manager/refs/heads/master/preview.webp)
 
 A Windows desktop application for managing a Windrose dedicated server. Built with .NET 10 and WinForms.
 
