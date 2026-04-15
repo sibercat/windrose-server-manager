@@ -1,0 +1,22 @@
+# Build output
+bin/
+obj/
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Rider
+.idea/
+
+# Cache files
+*.lscache
+
+# Publish artifacts
+publish/
+
+# User-specific files
+*.rsuser
