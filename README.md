@@ -21,7 +21,8 @@ A Windows desktop application for managing a Windrose dedicated server. Built wi
 
 - Windows 10/11 (x64)
 - [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/en-us/download/dotnet/10.0)
-- [SteamCMD](https://developer.valvesoftware.com/wiki/SteamCMD) (for installing/updating server files)
+
+> SteamCMD is downloaded and managed automatically by the application.
 
 ## Installation
 
