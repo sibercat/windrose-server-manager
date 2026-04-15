@@ -1,6 +1,6 @@
 # Windrose Server Manager
 
-A Windows desktop application for managing a [Windrose](https://store.steampowered.com/app/2609200/Windrose/) dedicated server. Built with .NET 10 and WinForms.
+A Windows desktop application for managing a Windrose dedicated server. Built with .NET 10 and WinForms.
 
 ## Features
 
@@ -112,7 +112,3 @@ dotnet publish -c Release
 ```
 
 Output: `bin\Release\net10.0-windows10.0.26100.0\win-x64\publish\WindroseServerManager.exe`
-
-## License
-
-MIT
