@@ -57,6 +57,12 @@ public partial class MainForm : Form
         _serverManager.InitializeState();
         UpdateServerState(_serverManager.State);
 
+        // Activate schedules from saved config now — otherwise auto-backup and
+        // scheduled restarts stay inert until the user hits Start or Save Settings
+        // (matters when re-attaching to an already-running server).
+        ApplyScheduleFromConfig();
+        ApplyBackupFromConfig();
+
         _uptimeTimer.Tick += UptimeTick;
         _uptimeTimer.Start();
 
@@ -89,6 +95,7 @@ public partial class MainForm : Form
         // Settings — ServerDescription.json
         btnWriteServerDesc.Click  += BtnWriteServerDesc_Click;
         btnRefreshInviteCode.Click += BtnRefreshInviteCode_Click;
+        chkDirectConnection.CheckedChanged += (_, _) => UpdateDirectConnectionVisibility();
 
         // Settings — WorldDescription.json
         btnSaveWorldDesc.Click    += BtnSaveWorldDesc_Click;
@@ -255,6 +262,13 @@ public partial class MainForm : Form
             txtPassword.Text       = "";
             numMaxPlayers.Value    = 8;
             txtP2pProxy.Text       = "0.0.0.0";
+            cmbRegion.SelectedIndex       = 0;
+            chkDirectConnection.Checked   = false;
+            numDirectPort.Value           = 7777;
+            txtDirectBind.Text            = "0.0.0.0";
+            txtDirectAddress.Text         = "";
+            chkAutoRestoreBackup.Checked  = true;
+            UpdateDirectConnectionVisibility();
             return;
         }
 
@@ -264,6 +278,25 @@ public partial class MainForm : Form
         txtPassword.Text            = data.Password;
         numMaxPlayers.Value         = Math.Clamp(data.MaxPlayerCount, 1, 200);
         txtP2pProxy.Text            = data.P2pProxyAddress;
+
+        cmbRegion.SelectedIndex = data.UserSelectedRegion switch
+        {
+            "EU"  => 1,
+            "SEA" => 2,
+            "CIS" => 3,
+            _     => 0
+        };
+        chkDirectConnection.Checked  = data.UseDirectConnection;
+        numDirectPort.Value          = Math.Clamp(data.DirectConnectionServerPort, 1, 65535);
+        txtDirectBind.Text           = data.DirectConnectionProxyAddress;
+        txtDirectAddress.Text        = data.DirectConnectionServerAddress;
+        chkAutoRestoreBackup.Checked = data.AutoLoadLatestBackupIfHasBroken;
+        UpdateDirectConnectionVisibility();
+
+        // Keep the launcher config's name in sync so Discord notifications
+        // use the real server name instead of the stale default.
+        if (!string.IsNullOrWhiteSpace(data.ServerName))
+            _config.ServerName = data.ServerName;
     }
 
     private void BtnWriteServerDesc_Click(object? sender, EventArgs e)
@@ -297,13 +330,37 @@ public partial class MainForm : Form
             return;
         }
 
+        // Guide rule: IsPasswordProtected must match the Password field state
+        if (chkPasswordProtected.Checked && string.IsNullOrEmpty(txtPassword.Text))
+        {
+            MessageBox.Show(
+                "Password Protected is enabled but the password is empty.\n" +
+                "Enter a password or uncheck Password Protected.",
+                "Missing Password", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
         existing.InviteCode          = newCode;
         existing.ServerName          = txtServerName.Text.Trim();
         existing.IsPasswordProtected = chkPasswordProtected.Checked;
         existing.Password            = txtPassword.Text;
         existing.MaxPlayerCount      = (int)numMaxPlayers.Value;
         existing.P2pProxyAddress     = txtP2pProxy.Text.Trim();
-        // PersistentServerId, WorldIslandId preserved from existing
+
+        existing.UserSelectedRegion = cmbRegion.SelectedIndex switch
+        {
+            1 => "EU",
+            2 => "SEA",
+            3 => "CIS",
+            _ => ""
+        };
+        existing.UseDirectConnection             = chkDirectConnection.Checked;
+        existing.DirectConnectionServerPort      = (int)numDirectPort.Value;
+        existing.DirectConnectionProxyAddress    = string.IsNullOrWhiteSpace(txtDirectBind.Text)
+                                                     ? "0.0.0.0" : txtDirectBind.Text.Trim();
+        existing.DirectConnectionServerAddress   = txtDirectAddress.Text.Trim();
+        existing.AutoLoadLatestBackupIfHasBroken = chkAutoRestoreBackup.Checked;
+        // PersistentServerId, WorldIslandId, CanLaunchMultipleServerInstances preserved from existing
 
         bool ok = _configManager.WriteServerDescription(existing);
         if (ok)
@@ -375,7 +432,7 @@ public partial class MainForm : Form
         UpdateWorldPresetVisibility();
     }
 
-    private void BtnSaveWorldDesc_Click(object? sender, EventArgs e)
+    private async void BtnSaveWorldDesc_Click(object? sender, EventArgs e)
     {
         if (_serverManager.IsRunning)
         {
@@ -428,17 +485,35 @@ public partial class MainForm : Form
         existing.CoopShipStatsCorrectionModifier = (double)numCoopShips.Value;
 
         bool ok = _configManager.WriteWorldDescription(serverDesc.WorldIslandId, existing);
-        if (ok)
-        {
-            AppendConsole("[Settings] WorldDescription.json saved. Restart the server for changes to take effect.",
-                ThemeManager.StateRunning);
-            BtnRefreshWorldDesc_Click(null, EventArgs.Empty);
-        }
-        else
+        if (!ok)
         {
             MessageBox.Show("Failed to write WorldDescription.json. Check the log for details.",
                 "Write Failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return;
         }
+
+        AppendConsole("[Settings] WorldDescription.json saved.", ThemeManager.StateRunning);
+
+        // Since game version ~0.10.0.5 the JSON must be pushed into the world
+        // database with the game's updater tool, or the changes never apply.
+        btnSaveWorldDesc.Enabled = false;
+        try
+        {
+            string? worldDescPath = _configManager.FindWorldDescriptionPath(serverDesc.WorldIslandId);
+            if (worldDescPath != null)
+            {
+                var (updOk, updMsg) = await _configManager.RunWorldDescriptionUpdaterAsync(worldDescPath);
+                AppendConsole($"[Settings] {updMsg}",
+                    updOk ? ThemeManager.StateRunning : Color.FromArgb(255, 185, 0));
+            }
+        }
+        finally
+        {
+            btnSaveWorldDesc.Enabled = true;
+        }
+
+        AppendConsole("[Settings] Restart the server for changes to take effect.", ThemeManager.StateRunning);
+        BtnRefreshWorldDesc_Click(null, EventArgs.Empty);
     }
 
     // ── Game.ini (Advanced Network) ───────────────────────────────────
@@ -514,8 +589,17 @@ public partial class MainForm : Form
 
     // ── Helper Methods ────────────────────────────────────────────────
 
+    // Only controls saved by "Save Launcher Settings" — the ServerDescription /
+    // WorldDescription / Game.ini controls have their own save buttons, and wiring
+    // them here made switching to the Settings tab (which refreshes them from disk)
+    // spuriously show "Unsaved changes".
     private IEnumerable<Control> GetAllSettingsControls() =>
-        GetAllControls(tabSettings).Concat(GetAllControls(tabAutomation));
+        new Control[]
+        {
+            cmbProcessPriority, chkCrashDetection, chkAutoRestart,
+            numMaxRestarts, txtCustomArgs
+        }
+        .Concat(GetAllControls(tabAutomation));
 
     private static IEnumerable<Control> GetAllControls(Control parent)
     {
@@ -553,6 +637,14 @@ public partial class MainForm : Form
     {
         txtFixedTimes.Enabled    = rdoFixedTimes.Checked;
         numIntervalHours.Enabled = rdoInterval.Checked;
+    }
+
+    private void UpdateDirectConnectionVisibility()
+    {
+        bool direct = chkDirectConnection.Checked;
+        numDirectPort.Enabled    = direct;
+        txtDirectBind.Enabled    = direct;
+        txtDirectAddress.Enabled = direct;
     }
 
     private void SetBackupIntervalCombo(int hours)

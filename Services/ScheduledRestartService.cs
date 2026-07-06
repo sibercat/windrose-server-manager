@@ -24,7 +24,7 @@ public class ScheduledRestartService
         _enabled        = enabled;
         _useFixedTimes  = useFixedTimes;
         _intervalHours  = Math.Clamp(intervalHours, 1, 168);
-        _warningMinutes = Math.Clamp(warningMinutes, 1, 60);
+        _warningMinutes = Math.Clamp(warningMinutes, 0, 60);   // 0 = no warning
         _fixedTimes     = ParseFixedTimes(fixedTimesStr);
         _warnedMinutes.Clear();
 
@@ -42,10 +42,16 @@ public class ScheduledRestartService
         if (!_enabled) return;
         double remaining = (_nextRestart - DateTime.Now).TotalMinutes;
 
-        foreach (int warnAt in new[] { _warningMinutes, 5, 1 })
+        // 0 = no warnings at all; extra 5/1-minute reminders only fire when they
+        // fall inside the configured warning window.
+        if (_warningMinutes > 0)
         {
-            if (remaining <= warnAt && remaining > warnAt - 0.2 && _warnedMinutes.Add(warnAt))
-                WarningIssued?.Invoke(this, warnAt);
+            foreach (int warnAt in new[] { _warningMinutes, 5, 1 })
+            {
+                if (warnAt > _warningMinutes) continue;
+                if (remaining <= warnAt && remaining > warnAt - 0.2 && _warnedMinutes.Add(warnAt))
+                    WarningIssued?.Invoke(this, warnAt);
+            }
         }
 
         if (DateTime.Now >= _nextRestart)

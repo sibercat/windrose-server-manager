@@ -87,6 +87,15 @@ public class ConfigurationManager
                 WorldIslandId       = GetString(persistent, "WorldIslandId"),
                 MaxPlayerCount      = persistent.TryGetProperty("MaxPlayerCount", out var mc) ? mc.GetInt32() : 8,
                 P2pProxyAddress     = GetString(persistent, "P2pProxyAddress"),
+
+                // Fields added around game version 0.10.0.5 — absent on older servers
+                UserSelectedRegion               = GetString(persistent, "UserSelectedRegion"),
+                UseDirectConnection              = GetBool(persistent,   "UseDirectConnection",             false),
+                DirectConnectionServerAddress    = GetString(persistent, "DirectConnectionServerAddress"),
+                DirectConnectionServerPort       = GetInt(persistent,    "DirectConnectionServerPort",      7777),
+                DirectConnectionProxyAddress     = GetString(persistent, "DirectConnectionProxyAddress",    "0.0.0.0"),
+                AutoLoadLatestBackupIfHasBroken  = GetBool(persistent,   "AutoLoadLatestBackupIfHasBroken", true),
+                CanLaunchMultipleServerInstances = GetBool(persistent,   "CanLaunchMultipleServerInstances", false),
             };
         }
         catch (Exception ex)
@@ -115,26 +124,42 @@ public class ConfigurationManager
                 File.ReadAllText(ServerDescriptionPath))
                 ?? throw new Exception("Failed to parse ServerDescription.json");
 
-            // Rebuild ServerDescription_Persistent with updated values
-            var persistent = new Dictionary<string, object?>
+            // Start from the existing persistent block so any fields we don't know
+            // about (added by newer game versions) survive the round-trip.
+            var persistent = new Dictionary<string, object?>();
+            if (root.TryGetValue("ServerDescription_Persistent", out var pEl) &&
+                pEl.ValueKind == JsonValueKind.Object)
             {
-                ["PersistentServerId"]  = data.PersistentServerId,
-                ["InviteCode"]          = data.InviteCode,
-                ["IsPasswordProtected"] = data.IsPasswordProtected,
-                ["Password"]            = data.Password,
-                ["ServerName"]          = data.ServerName,
-                ["WorldIslandId"]       = data.WorldIslandId,
-                ["MaxPlayerCount"]      = data.MaxPlayerCount,
-                ["P2pProxyAddress"]     = data.P2pProxyAddress,
-            };
+                foreach (var prop in pEl.EnumerateObject())
+                    persistent[prop.Name] = prop.Value;
+            }
 
-            // Write a new JSON document preserving Version and DeploymentId
-            var output = new Dictionary<string, object?>
+            persistent["PersistentServerId"]  = data.PersistentServerId;
+            persistent["InviteCode"]          = data.InviteCode;
+            persistent["IsPasswordProtected"] = data.IsPasswordProtected;
+            persistent["Password"]            = data.Password;
+            persistent["ServerName"]          = data.ServerName;
+            persistent["WorldIslandId"]       = data.WorldIslandId;
+            persistent["MaxPlayerCount"]      = data.MaxPlayerCount;
+            persistent["P2pProxyAddress"]     = data.P2pProxyAddress;
+
+            // 0.10.0.5+ fields — only write them when the server's file already has
+            // them, so we don't inject unknown keys into an older server's config.
+            if (persistent.ContainsKey("UseDirectConnection"))
             {
-                ["Version"]                      = root.TryGetValue("Version", out var v) ? v.GetInt32() : 1,
-                ["DeploymentId"]                 = root.TryGetValue("DeploymentId", out var d) ? d.GetString() : "",
-                ["ServerDescription_Persistent"] = persistent
-            };
+                persistent["UserSelectedRegion"]               = data.UserSelectedRegion;
+                persistent["UseDirectConnection"]              = data.UseDirectConnection;
+                persistent["DirectConnectionServerAddress"]    = data.DirectConnectionServerAddress;
+                persistent["DirectConnectionServerPort"]       = data.DirectConnectionServerPort;
+                persistent["DirectConnectionProxyAddress"]     = data.DirectConnectionProxyAddress;
+                persistent["AutoLoadLatestBackupIfHasBroken"]  = data.AutoLoadLatestBackupIfHasBroken;
+                persistent["CanLaunchMultipleServerInstances"] = data.CanLaunchMultipleServerInstances;
+            }
+
+            // Preserve all root-level fields (Version, DeploymentId, anything new)
+            var output = new Dictionary<string, object?>();
+            foreach (var kv in root) output[kv.Key] = kv.Value;
+            output["ServerDescription_Persistent"] = persistent;
 
             var writeOpts = new JsonSerializerOptions { WriteIndented = true };
             File.WriteAllText(ServerDescriptionPath, JsonSerializer.Serialize(output, writeOpts));
@@ -267,14 +292,85 @@ public class ConfigurationManager
     public string? FindWorldDescriptionPath(string worldIslandId)
     {
         if (string.IsNullOrEmpty(worldIslandId)) return null;
-        string worldsBase = Path.Combine(R5Dir, "Saved", "SaveProfiles", "Default", "RocksDB");
-        if (!Directory.Exists(worldsBase)) return null;
-        foreach (var versionDir in Directory.GetDirectories(worldsBase))
+        // Game version 0.10.0.5+ uses RocksDB_v2; older installs use RocksDB.
+        foreach (var dbFolder in new[] { "RocksDB_v2", "RocksDB" })
         {
-            var p = Path.Combine(versionDir, "Worlds", worldIslandId, "WorldDescription.json");
-            if (File.Exists(p)) return p;
+            string worldsBase = Path.Combine(R5Dir, "Saved", "SaveProfiles", "Default", dbFolder);
+            if (!Directory.Exists(worldsBase)) continue;
+            foreach (var versionDir in Directory.GetDirectories(worldsBase))
+            {
+                var p = Path.Combine(versionDir, "Worlds", worldIslandId, "WorldDescription.json");
+                if (File.Exists(p)) return p;
+            }
         }
         return null;
+    }
+
+    /// <summary>
+    /// Runs R5WorldDescriptionUpdater.exe to push WorldDescription.json edits into the
+    /// world database. Required since game version ~0.10.0.5 — the server no longer
+    /// re-reads the JSON directly on startup. Older installs don't ship the exe and
+    /// apply the JSON on startup as before, so a missing exe is not fatal.
+    /// </summary>
+    public async Task<(bool Ok, string Message)> RunWorldDescriptionUpdaterAsync(string worldDescriptionPath)
+    {
+        string[] candidates =
+        [
+            Path.Combine(ServerFilesDir, "R5WorldDescriptionUpdater.exe"),
+            Path.Combine(R5Dir, "R5WorldDescriptionUpdater.exe"),
+            Path.Combine(R5Dir, "Binaries", "Win64", "R5WorldDescriptionUpdater.exe"),
+        ];
+        string? exe = candidates.FirstOrDefault(File.Exists);
+        if (exe == null)
+        {
+            _logger.Info("R5WorldDescriptionUpdater.exe not found — assuming pre-0.10.0.5 server (JSON applied on startup).");
+            return (false, "R5WorldDescriptionUpdater.exe not found. On servers older than game version 0.10.0.5 " +
+                           "this is fine (the JSON is read on startup); on newer servers run Update/Validate first.");
+        }
+
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName               = exe,
+                Arguments              = $"\"{worldDescriptionPath}\"",
+                WorkingDirectory       = ServerFilesDir,
+                UseShellExecute        = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError  = true,
+                CreateNoWindow         = true
+            };
+
+            using var proc = Process.Start(psi)
+                ?? throw new Exception("Failed to start R5WorldDescriptionUpdater.exe.");
+
+            var outTask = proc.StandardOutput.ReadToEndAsync();
+            var errTask = proc.StandardError.ReadToEndAsync();
+
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+            try { await proc.WaitForExitAsync(cts.Token); }
+            catch (OperationCanceledException)
+            {
+                try { proc.Kill(entireProcessTree: true); } catch { }
+                _logger.Warning("R5WorldDescriptionUpdater.exe timed out after 60 s.");
+                return (false, "World description updater timed out after 60 seconds.");
+            }
+
+            string output = ((await outTask) + (await errTask)).Trim();
+            bool ok = proc.ExitCode == 0;
+            _logger.Info($"R5WorldDescriptionUpdater exit code {proc.ExitCode}." +
+                         (output.Length > 0 ? $" Output: {output}" : ""));
+
+            return ok
+                ? (true, "World database updated (R5WorldDescriptionUpdater).")
+                : (false, $"R5WorldDescriptionUpdater failed (exit {proc.ExitCode})." +
+                          (output.Length > 0 ? $" {output}" : ""));
+        }
+        catch (Exception ex)
+        {
+            _logger.Error("Failed to run R5WorldDescriptionUpdater.exe.", ex);
+            return (false, $"Failed to run world description updater: {ex.Message}");
+        }
     }
 
     public WorldDescriptionData? ReadWorldDescription(string worldIslandId)
@@ -391,8 +487,15 @@ public class ConfigurationManager
 
     // ── Helpers ──────────────────────────────────────────────────────
 
-    private static string GetString(JsonElement el, string key) =>
-        el.TryGetProperty(key, out var p) ? (p.GetString() ?? "") : "";
+    private static string GetString(JsonElement el, string key, string def = "") =>
+        el.TryGetProperty(key, out var p) ? (p.GetString() ?? def) : def;
+
+    private static bool GetBool(JsonElement el, string key, bool def) =>
+        el.TryGetProperty(key, out var p) &&
+        p.ValueKind is JsonValueKind.True or JsonValueKind.False ? p.GetBoolean() : def;
+
+    private static int GetInt(JsonElement el, string key, int def) =>
+        el.TryGetProperty(key, out var p) && p.TryGetInt32(out var v) ? v : def;
 
     // Use Contains so we're resilient to JSON key formatting variations
     // (spacing, escaping) between game versions.
@@ -436,6 +539,20 @@ public class ServerDescriptionData
     public string WorldIslandId       { get; set; } = "";
     public int    MaxPlayerCount      { get; set; } = 8;
     public string P2pProxyAddress     { get; set; } = "0.0.0.0";
+
+    // ── Added around game version 0.10.0.5 ───────────────────────────
+    /// <summary>"SEA", "CIS", "EU" — empty string = auto (nearest region).</summary>
+    public string UserSelectedRegion               { get; set; } = "";
+    /// <summary>true = direct TCP/UDP sockets (port forwarding); false = ICE P2P.</summary>
+    public bool   UseDirectConnection              { get; set; } = false;
+    public string DirectConnectionServerAddress    { get; set; } = "";
+    /// <summary>Direct-connection port (TCP + UDP). Game default 7777.</summary>
+    public int    DirectConnectionServerPort       { get; set; } = 7777;
+    /// <summary>Network interface to bind for direct connections.</summary>
+    public string DirectConnectionProxyAddress     { get; set; } = "0.0.0.0";
+    public bool   AutoLoadLatestBackupIfHasBroken  { get; set; } = true;
+    /// <summary>Safeguard against save corruption — not exposed in UI, preserved on write.</summary>
+    public bool   CanLaunchMultipleServerInstances { get; set; } = false;
 }
 
 /// <summary>

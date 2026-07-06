@@ -184,6 +184,12 @@ public class ServerManager
     {
         await StopAsync();
         await Task.Delay(2000);
+
+        // StopAsync set _isStopping — clear it or crash detection stays dead
+        // (OnShippingExited would early-return forever after a restart).
+        _lastConfig      = cfg;
+        _isStopping      = false;
+        _restartAttempts = 0;
         DoStart(cfg);
     }
 

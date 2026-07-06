@@ -11,21 +11,25 @@ partial class MainForm
     private async Task RunDiagnosticsAsync()
     {
         this.InvokeIfRequired(() => btnRunDiagnostics.Enabled = false);
+        try
+        {
+            DiagLine("");
+            DiagLine("══════════════════════════════════════════════════════", Color.FromArgb(70, 70, 70));
+            DiagLine("  Network Diagnostics", Color.FromArgb(255, 185, 0));
+            DiagLine("══════════════════════════════════════════════════════", Color.FromArgb(70, 70, 70));
 
-        DiagLine("");
-        DiagLine("══════════════════════════════════════════════════════", Color.FromArgb(70, 70, 70));
-        DiagLine("  Network Diagnostics", Color.FromArgb(255, 185, 0));
-        DiagLine("══════════════════════════════════════════════════════", Color.FromArgb(70, 70, 70));
+            await DiagDnsSystemAsync();
+            await DiagDnsGoogleAsync();
+            await DiagPortAsync();
+            await DiagIpv6Async();
 
-        await DiagDnsSystemAsync();
-        await DiagDnsGoogleAsync();
-        await DiagPortAsync();
-        await DiagIpv6Async();
-
-        DiagLine("══════════════════════════════════════════════════════", Color.FromArgb(70, 70, 70));
-        DiagLine("");
-
-        this.InvokeIfRequired(() => btnRunDiagnostics.Enabled = true);
+            DiagLine("══════════════════════════════════════════════════════", Color.FromArgb(70, 70, 70));
+            DiagLine("");
+        }
+        finally
+        {
+            this.InvokeIfRequired(() => btnRunDiagnostics.Enabled = true);
+        }
     }
 
     // ── DNS via system resolver ───────────────────────────────────────

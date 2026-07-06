@@ -30,6 +30,10 @@ partial class MainForm
     protected TextBox txtInviteCode, txtServerName, txtPassword, txtP2pProxy;
     protected CheckBox chkPasswordProtected;
     protected NumericUpDown numMaxPlayers;
+    protected ComboBox cmbRegion;
+    protected CheckBox chkDirectConnection, chkAutoRestoreBackup;
+    protected NumericUpDown numDirectPort;
+    protected TextBox txtDirectBind, txtDirectAddress;
     protected Button btnRefreshInviteCode, btnCopyInviteCode, btnWriteServerDesc;
 
     // ── Settings — WorldDescription.json ─────────────────────────────
@@ -274,7 +278,7 @@ partial class MainForm
         int y = 8;
 
         // ── ServerDescription.json ────────────────────────────────────
-        var grpDesc = MakeGroupBox("Server Config  (ServerDescription.json)", 8, y, 620, 200);
+        var grpDesc = MakeGroupBox("Server Config  (ServerDescription.json)", 8, y, 620, 360);
 
         var lblNote = new Label
         {
@@ -328,18 +332,80 @@ partial class MainForm
         };
         grpDesc.Controls.AddRange([lblMp, numMaxPlayers, lblProxy, txtP2pProxy, lblProxyHint]);
 
+        // Region — fixed-width label per layout rule
+        var lblRegion = new Label
+        {
+            Text = "Region:", AutoSize = false, Size = new Size(98, 20),
+            Location = new Point(8, 182), TextAlign = ContentAlignment.MiddleLeft
+        };
+        cmbRegion = new ComboBox
+        {
+            Location = new Point(110, 179), Size = new Size(100, 24), DropDownStyle = ComboBoxStyle.DropDownList
+        };
+        cmbRegion.Items.AddRange(["Auto", "EU", "SEA", "CIS"]);
+        cmbRegion.SelectedIndex = 0;
+        var lblRegionHint = new Label
+        {
+            Text = "Auto = nearest region (EU also covers NA)", AutoSize = true,
+            Location = new Point(220, 182), ForeColor = Color.Gray, Font = new Font("Segoe UI", 8f)
+        };
+        grpDesc.Controls.AddRange([lblRegion, cmbRegion, lblRegionHint]);
+
+        // Direct connection mode (0.10.0.5+)
+        chkDirectConnection = new CheckBox
+        {
+            Text = "Use direct connection  (requires port forwarding — bypasses P2P/STUN relay)",
+            AutoSize = true, Location = new Point(8, 210)
+        };
+        var lblDirectPort = new Label
+        {
+            Text = "Port:", AutoSize = false, Size = new Size(40, 20),
+            Location = new Point(28, 240), TextAlign = ContentAlignment.MiddleLeft
+        };
+        numDirectPort = new NumericUpDown
+        {
+            Location = new Point(70, 236), Size = new Size(80, 24), Minimum = 1, Maximum = 65535, Value = 7777
+        };
+        var lblDirectBind = new Label
+        {
+            Text = "Bind address:", AutoSize = false, Size = new Size(90, 20),
+            Location = new Point(170, 240), TextAlign = ContentAlignment.MiddleLeft
+        };
+        txtDirectBind = new TextBox { Location = new Point(262, 236), Size = new Size(110, 24), Text = "0.0.0.0" };
+        var lblDirectAddr = new Label
+        {
+            Text = "Public address:", AutoSize = false, Size = new Size(100, 20),
+            Location = new Point(28, 270), TextAlign = ContentAlignment.MiddleLeft
+        };
+        txtDirectAddress = new TextBox { Location = new Point(130, 266), Size = new Size(160, 24) };
+        var lblDirectAddrHint = new Label
+        {
+            Text = "optional — leave empty unless needed", AutoSize = true,
+            Location = new Point(300, 270), ForeColor = Color.Gray, Font = new Font("Segoe UI", 8f)
+        };
+        grpDesc.Controls.AddRange([chkDirectConnection, lblDirectPort, numDirectPort,
+            lblDirectBind, txtDirectBind, lblDirectAddr, txtDirectAddress, lblDirectAddrHint]);
+
+        // Auto-restore broken saves (0.10.0.5+)
+        chkAutoRestoreBackup = new CheckBox
+        {
+            Text = "Auto-restore latest backup if save data is broken",
+            AutoSize = true, Location = new Point(8, 298)
+        };
+        grpDesc.Controls.Add(chkAutoRestoreBackup);
+
         // Save button
         btnWriteServerDesc = new Button
         {
             Text = "Save to Server Config",
             Size = new Size(160, 28),
-            Location = new Point(8, 176),
+            Location = new Point(8, 324),
             Tag  = "accent"
         };
         grpDesc.Controls.Add(btnWriteServerDesc);
 
         scroll.Controls.Add(grpDesc);
-        y += 210;
+        y += 370;
 
         // ── World Settings ────────────────────────────────────────────
         var grpWorld = MakeGroupBox("World Settings  (WorldDescription.json)", 8, y, 620, 338);
@@ -758,12 +824,36 @@ partial class MainForm
         toolTip.SetToolTip(txtPassword,          "Password players must enter to connect. Only used when Password Protected is checked.");
         toolTip.SetToolTip(numMaxPlayers,
             "Maximum number of players allowed on the server at the same time.\n" +
-            "Up to 4 players is recommended for smoother performance.\n" +
+            "Official RAM guidance: 2 players = 8 GB, 4 players = 12 GB, 10 players = 16 GB.\n" +
             "Higher counts place progressively more load on CPU and RAM.");
         toolTip.SetToolTip(txtP2pProxy,
             "IP address the server listens on for connections.\n" +
             "0.0.0.0 = all network interfaces (required for VPS / dedicated servers).\n" +
             "127.0.0.1 = localhost only (LAN / same machine).");
+        toolTip.SetToolTip(cmbRegion,
+            "Relay/matchmaking region for your server.\n" +
+            "Auto = nearest region is picked automatically.\n" +
+            "EU covers both Europe and North America; SEA = Southeast Asia; CIS = Russia/CIS.");
+        toolTip.SetToolTip(chkDirectConnection,
+            "Direct TCP/UDP connection instead of the P2P/ICE relay system.\n\n" +
+            "Players connect straight to your IP and port — you must forward the\n" +
+            "port (TCP + UDP) on your router or open it in your VPS firewall.\n" +
+            "Bypasses the STUN/TURN relay entirely, so it also works when an ISP\n" +
+            "blocks port 3478. Requires a public IP address.");
+        toolTip.SetToolTip(numDirectPort,
+            "Port for direct connections (TCP + UDP). Game default: 7777.\n" +
+            "Forward this port on your router / open it in your firewall.\n" +
+            "If it doesn't work, try alternatives like 17777 or 27890 (max 65000).");
+        toolTip.SetToolTip(txtDirectBind,
+            "Network interface the server binds to for direct connections.\n" +
+            "0.0.0.0 = all interfaces (default, recommended).");
+        toolTip.SetToolTip(txtDirectAddress,
+            "Optional public address advertised for direct connections.\n" +
+            "Leave empty unless your setup needs it (e.g. a specific public IP\n" +
+            "in front of NAT).");
+        toolTip.SetToolTip(chkAutoRestoreBackup,
+            "If the world save fails to load on startup, the server automatically\n" +
+            "restores the latest of its own rolling backups.");
         toolTip.SetToolTip(btnWriteServerDesc,
             "Write your changes to ServerDescription.json.\n" +
             "Server must be stopped. Restart it afterwards for changes to take effect.");
@@ -804,7 +894,9 @@ partial class MainForm
             "Adjusts enemy ship health based on player count.\n" +
             "Range: 0.00–2.00  (Custom preset only)");
         toolTip.SetToolTip(btnSaveWorldDesc,
-            "Write your changes to WorldDescription.json.\n" +
+            "Write your changes to WorldDescription.json, then run the game's\n" +
+            "R5WorldDescriptionUpdater tool to apply them to the world database\n" +
+            "(required since game version 0.10.0.5).\n" +
             "Server must be stopped. Restart it afterwards for changes to take effect.");
         toolTip.SetToolTip(btnRefreshWorldDesc, "Re-read WorldDescription.json to refresh all world settings fields.");
 
@@ -921,38 +1013,6 @@ partial class MainForm
 
     private static GroupBox MakeGroupBox(string title, int x, int y, int w, int h) =>
         new() { Text = title, Location = new Point(x, y), Size = new Size(w, h) };
-
-    private static void AddLabeledNumeric(GroupBox grp, string label, int x, int y,
-        out NumericUpDown num, int min, int max, int val)
-    {
-        var lbl = new Label { Text = label, AutoSize = true, Location = new Point(x, y + 4) };
-        int lblW = TextRenderer.MeasureText(label, SystemFonts.DefaultFont).Width + 6;
-        num = new NumericUpDown
-        {
-            Location = new Point(x + lblW, y),
-            Size     = new Size(80, 24),
-            Minimum  = min, Maximum = max, Value = val
-        };
-        grp.Controls.AddRange([lbl, num]);
-    }
-
-    private static void AddLabeledFloat(GroupBox grp, string label, int x, int y,
-        out NumericUpDown num, decimal min, decimal max, decimal val)
-    {
-        var lbl = new Label { Text = label, AutoSize = true, Location = new Point(x, y + 4) };
-        int lblW = TextRenderer.MeasureText(label, SystemFonts.DefaultFont).Width + 6;
-        num = new NumericUpDown
-        {
-            Location      = new Point(x + lblW, y),
-            Size          = new Size(80, 24),
-            DecimalPlaces = 2,
-            Increment     = 0.05m,
-            Minimum       = min,
-            Maximum       = max,
-            Value         = val
-        };
-        grp.Controls.AddRange([lbl, num]);
-    }
 
     /// <summary>
     /// Fixed-column multiplier row for World Settings — avoids font-measurement drift.

@@ -11,8 +11,8 @@ public class BackupService
     private System.Threading.Timer? _timer;
     private DateTime _nextBackupTime = DateTime.MaxValue;
     private bool _enabled;
-    private int  _intervalHours;
-    private int  _keepCount;
+    private int  _intervalHours = 6;
+    private int  _keepCount     = 10;   // must never be 0 — CleanOldBackups would wipe everything
 
     public event EventHandler<string>? BackupCreated;
     public event EventHandler<string>? BackupFailed;
@@ -48,7 +48,9 @@ public class BackupService
         }
     }
 
-    public async Task<string?> CreateBackupAsync()
+    public Task<string?> CreateBackupAsync() => CreateBackupAsync(protectFromCleanup: null);
+
+    private async Task<string?> CreateBackupAsync(string? protectFromCleanup)
     {
         if (!Directory.Exists(_saveDataPath))
         {
@@ -80,7 +82,7 @@ public class BackupService
             });
 
             _logger.Info($"Backup created: {backupPath}");
-            CleanOldBackups();
+            CleanOldBackups(protectFromCleanup);
             BackupCreated?.Invoke(this, backupPath);
             return backupPath;
         }
@@ -97,11 +99,14 @@ public class BackupService
     {
         try
         {
-            // Safety backup first
-            await CreateBackupAsync();
+            // Safety backup first — must not clean up the backup we're about to restore
+            await CreateBackupAsync(protectFromCleanup: backupPath);
 
             await Task.Run(() =>
             {
+                // Validate the archive before touching live save data
+                using (ZipFile.OpenRead(backupPath)) { }
+
                 if (Directory.Exists(_saveDataPath))
                     Directory.Delete(_saveDataPath, recursive: true);
                 ZipFile.ExtractToDirectory(backupPath, _saveDataPath);
@@ -132,11 +137,15 @@ public class BackupService
         catch (Exception ex) { _logger.Error("Failed to delete backup.", ex); return false; }
     }
 
-    private void CleanOldBackups()
+    private void CleanOldBackups(string? protect = null)
     {
+        if (_keepCount < 1) return;   // never mass-delete on a misconfigured keep count
+
         var backups = GetBackups();
         foreach (var (path, _, _) in backups.Skip(_keepCount))
         {
+            if (protect != null && string.Equals(Path.GetFullPath(path), Path.GetFullPath(protect),
+                StringComparison.OrdinalIgnoreCase)) continue;
             try { File.Delete(path); _logger.Info($"Deleted old backup: {path}"); }
             catch { }
         }
