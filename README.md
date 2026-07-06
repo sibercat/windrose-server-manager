@@ -12,8 +12,9 @@ A Windows desktop application for managing a Windrose dedicated server. Built wi
 - **Scheduled Restarts** — Interval-based or fixed-time restarts with configurable player warnings
 - **Automatic Backups** — Timed backups of save data with configurable keep count
 - **Manual Backups** — Create, restore, and delete backups on demand from the Backups tab
-- **World Settings** — Edit difficulty preset, combat difficulty, and all gameplay multipliers directly from the UI
-- **Server Config** — Edit server name, password, max players, and P2P proxy address
+- **World Settings** — Edit difficulty preset, combat difficulty, and all gameplay multipliers directly from the UI (applied via the game's world database updater on 0.10.0.5+)
+- **Server Config** — Edit server name, invite code, password, max players, region, and connection mode
+- **Direct Connection Mode** — Classic port-forwarding hosting (default 7777 TCP+UDP) that bypasses the STUN/P2P relay entirely
 - **Advanced Network Settings** — Configure P2P port range, relay mode, encryption, and server timeout behavior
 - **Discord Webhooks** — Notifications for server start, stop, crash, restart, and backup events
 - **Process Priority** — Set the server process priority (Normal, Above Normal, High)
@@ -47,8 +48,8 @@ The main button is context-sensitive:
 The **Update** button re-runs SteamCMD to update server files (server must be stopped first).
 
 ### Settings Tab
-- **Server Config** — server name, invite code, password, max players, P2P proxy address. Changes are written to `ServerDescription.json` and take effect on next server start.
-- **World Settings** — world name, difficulty preset (Easy / Medium / Hard / Custom), combat difficulty, and gameplay multipliers. Changes are written to `WorldDescription.json` and take effect on next server start.
+- **Server Config** — server name, invite code, password, max players, region (Auto / EU / SEA / CIS), P2P proxy address, direct connection mode, and auto-restore of broken saves. Changes are written to `ServerDescription.json` and take effect on next server start.
+- **World Settings** — world name, difficulty preset (Easy / Medium / Hard / Custom), combat difficulty, and gameplay multipliers. Changes are written to `WorldDescription.json`; on game version 0.10.0.5+ the manager also runs the game's `R5WorldDescriptionUpdater.exe` automatically so the changes are applied to the world database. Take effect on next server start.
 - **Advanced Network Settings** — configures `Game.ini` overrides for P2P networking (see below).
 - **Crash Detection & Auto-Restart** — enable/disable crash monitoring and configure max restart attempts.
 
@@ -87,6 +88,10 @@ Writes a `Game.ini` override file to configure P2P networking behavior. All valu
 
 ## VPS Hosting
 
+There are two ways to host, selected in **Server Config**:
+
+### P2P Mode (default)
+
 Set **P2P Proxy Address** to `0.0.0.0` in Server Config (already the default). The server uses STUN for NAT traversal — all clients connect to the server, not to each other. Only the server's IP is exposed to players.
 
 **Required firewall / security group rule:**
@@ -97,6 +102,24 @@ Set **P2P Proxy Address** to `0.0.0.0` in Server Config (already the default). T
 
 The P2P port range in Advanced Network Settings is a secondary local bind range override and is rarely needed.
 
+### Direct Connection Mode (game version 0.10.0.5+)
+
+Enable **Use direct connection** in Server Config for classic port-forwarded hosting. Players connect straight to your server's IP and port — no STUN/TURN relay involved, so this also works when an ISP blocks port 3478. Requires a public IP.
+
+| Port | Protocol | Purpose |
+|------|----------|---------|
+| 7777 (default, configurable) | TCP + UDP | Direct player connections — forward on your router / open in your VPS security group |
+
+If the default port gives you trouble, try alternatives like `17777` or `27890` (up to 65000). Leave **Bind address** at `0.0.0.0` unless you need to bind a specific interface.
+
+### Sizing (official guidance)
+
+| Players | RAM | Storage |
+|---------|-----|---------|
+| 2 | 8 GB | 35 GB SSD |
+| 4 | 12 GB | 35 GB SSD |
+| 10 | 16 GB | 35 GB SSD |
+
 ## Troubleshooting
 
 Use the **Run Diagnostics** button on the Dashboard to automatically check:
@@ -105,7 +128,7 @@ Use the **Run Diagnostics** button on the Dashboard to automatically check:
 - IPv4 vs IPv6 priority (game requires IPv4)
 
 Common issues:
-- **Players can't connect** — ISP may be blocking port 3478. Ask them to whitelist `*.windrose.support` port 3478 UDP+TCP.
+- **Players can't connect** — ISP may be blocking port 3478. Ask them to whitelist `*.windrose.support` port 3478 UDP+TCP, or switch to **Direct Connection Mode** (see VPS Hosting above), which doesn't use the relay at all.
 - **IPv6 causing failures** — if diagnostics reports IPv6 has higher priority, run in an admin Command Prompt and restart: `reg add "HKLM\SYSTEM\CurrentControlSet\Services\Tcpip6\Parameters" /v DisabledComponents /t REG_DWORD /d 32 /f`
 - **DNS not resolving** — try switching to Google DNS (8.8.8.8 / 8.8.4.4) or Cloudflare (1.1.1.1).
 
